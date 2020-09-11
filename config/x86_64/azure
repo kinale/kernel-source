@@ -27,6 +27,7 @@ CONFIG_BLK_DEV_SD=y
 # CONFIG_BLK_DEV_SKD is not set
 # CONFIG_BLK_DEV_SX8 is not set
 # CONFIG_BLK_DEV_UMEM is not set
+CONFIG_BLK_DEV_INTEGRITY_T10=y
 # CONFIG_BNX2 is not set
 # CONFIG_BNX2X is not set
 # CONFIG_BNXT_DCB is not set
