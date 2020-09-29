@@ -4,7 +4,7 @@ Date: Sat, 13 Jun 2020 22:33:43 -0500
 Subject: [PATCH] ASoC: img-parallel-out: Fix a reference count leak
 Git-commit: 6b9fbb073636906eee9fe4d4c05a4f445b9e2a23
 Patch-mainline: v5.9-rc1
-References: git-fixes
+References: jsc#SLE-16518
 
 pm_runtime_get_sync() increments the runtime PM usage counter even
 when it returns an error code, causing incorrect ref count if

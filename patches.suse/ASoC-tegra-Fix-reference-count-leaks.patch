@@ -4,7 +4,7 @@ Date: Sat, 13 Jun 2020 15:44:19 -0500
 Subject: [PATCH] ASoC: tegra: Fix reference count leaks.
 Git-commit: deca195383a6085be62cb453079e03e04d618d6e
 Patch-mainline: v5.9-rc1
-References: git-fixes
+References: jsc#SLE-16518
 
 Calling pm_runtime_get_sync increments the counter even in case of
 failure, causing incorrect ref count if pm_runtime_put is not called in

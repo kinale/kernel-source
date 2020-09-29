@@ -4,7 +4,7 @@ Date: Sat, 13 Jun 2020 22:37:48 -0500
 Subject: [PATCH] ASoC: img: Fix a reference count leak in img_i2s_in_set_fmt
 Git-commit: c4c59b95b7f7d4cef5071b151be2dadb33f3287b
 Patch-mainline: v5.9-rc1
-References: git-fixes
+References: jsc#SLE-16518
 
 pm_runtime_get_sync() increments the runtime PM usage counter even
 when it returns an error code, causing incorrect ref count if
