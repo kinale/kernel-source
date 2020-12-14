@@ -55,6 +55,7 @@ CONFIG_BLK_DEV_INTEGRITY_T10=y
 # CONFIG_DRM is not set
 # CONFIG_DRM_DP_CEC is not set
 # CONFIG_DUMMY_IRQ is not set
+# CONFIG_DW_DMAC is not set
 # CONFIG_DW_DMAC_CORE is not set
 # CONFIG_DW_DMAC_PCI is not set
 # CONFIG_DW_EDMA is not set
