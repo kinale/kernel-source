@@ -324,6 +324,7 @@ CONFIG_MFD_CORE=m
 # CONFIG_NET_VENDOR_WIZNET is not set
 # CONFIG_NET_VENDOR_XILINX is not set
 # CONFIG_NEW_LEDS is not set
+# CONFIG_NFC is not set
 # CONFIG_NOZOMI is not set
 # CONFIG_NTB is not set
 # CONFIG_NVDIMM_PFN is not set
