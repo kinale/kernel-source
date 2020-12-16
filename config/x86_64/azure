@@ -88,6 +88,7 @@ CONFIG_BLK_DEV_INTEGRITY_T10=y
 # CONFIG_GNSS is not set
 # CONFIG_GPIO_BT8XX is not set
 # CONFIG_HABANA_AI is not set
+# CONFIG_HAMRADIO is not set
 # CONFIG_HID_A4TECH is not set
 # CONFIG_HID_ACRUX is not set
 # CONFIG_HID_ALPS is not set
