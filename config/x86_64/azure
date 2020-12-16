@@ -535,6 +535,7 @@ CONFIG_SCSI_MOD=y
 # CONFIG_VOP_BUS is not set
 # CONFIG_WATCHDOG is not set
 # CONFIG_WIRELESS is not set
+# CONFIG_WIMAX is not set
 # CONFIG_WLAN is not set
 # CONFIG_X86_AMD_FREQ_SENSITIVITY is not set
 # CONFIG_X86_EXTENDED_PLATFORM is not set
