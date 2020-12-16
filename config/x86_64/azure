@@ -540,6 +540,7 @@ CONFIG_SCSI_MOD=y
 # CONFIG_VMWARE_VMCI is not set
 # CONFIG_VMXNET3 is not set
 # CONFIG_VOP_BUS is not set
+# CONFIG_WAN is not set
 # CONFIG_WATCHDOG is not set
 # CONFIG_WIRELESS is not set
 # CONFIG_WIMAX is not set
