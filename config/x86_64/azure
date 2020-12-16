@@ -30,6 +30,7 @@
 # CONFIG_BLK_DEV_PCIESSD_MTIP32XX is not set
 # CONFIG_BLK_DEV_PMEM is not set
 # CONFIG_BLK_DEV_RBD is not set
+# CONFIG_BLK_DEV_RSXX is not set
 CONFIG_BLK_DEV_SD=y
 # CONFIG_BLK_DEV_SKD is not set
 # CONFIG_BLK_DEV_SX8 is not set
