@@ -1,3 +1,4 @@
+# CONFIG_WE_ARE_BUGFREE is not set
 # CONFIG_AD525X_DPOT is not set
 # CONFIG_ADFS_FS is not set
 # CONFIG_AFFS_FS is not set
