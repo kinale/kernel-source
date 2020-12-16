@@ -262,6 +262,7 @@ CONFIG_HYPERV_UTILS=y
 # CONFIG_INTERCONNECT is not set
 # CONFIG_IPACK_BUS is not set
 # CONFIG_IPMI_HANDLER is not set
+# CONFIG_ISA_BUS_API is not set
 # CONFIG_ISCSI_BOOT_SYSFS is not set
 # CONFIG_ISCSI_IBFT is not set
 # CONFIG_IXGB is not set
