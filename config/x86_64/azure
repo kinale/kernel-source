@@ -278,6 +278,7 @@ CONFIG_MFD_CORE=m
 # CONFIG_MWAVE is not set
 # CONFIG_NATIONAL_PHY is not set
 # CONFIG_ND_BLK is not set
+# CONFIG_NET_DSA is not set
 # CONFIG_NET_VENDOR_3COM is not set
 # CONFIG_NET_VENDOR_ADAPTEC is not set
 # CONFIG_NET_VENDOR_AGERE is not set
