@@ -168,6 +168,7 @@ CONFIG_HYPERV_UTILS=y
 # CONFIG_I8K is not set
 # CONFIG_IBM_ASM is not set
 # CONFIG_ICPLUS_PHY is not set
+# CONFIG_IEEE802154 is not set
 # CONFIG_IGB is not set
 # CONFIG_IIO is not set
 # CONFIG_INFINIBAND_BNXT_RE is not set
