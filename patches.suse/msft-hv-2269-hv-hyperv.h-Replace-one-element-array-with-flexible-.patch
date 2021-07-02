@@ -1,0 +1,58 @@
+From: "Gustavo A. R. Silva" <gustavoars@kernel.org>
+Date: Mon, 1 Feb 2021 11:43:34 -0600
+Patch-mainline: v5.12-rc1
+Subject: hv: hyperv.h: Replace one-element array with flexible-array in struct icmsg_negotiate
+Git-commit: 78785010d428f7755bf51d1c08cb2566a73dc7f5
+References: bsc#1186071
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+There is a regular need in the kernel to provide a way to declare having
+a dynamically sized set of trailing elements in a structure. Kernel code
+should always use “flexible array members”[1] for these cases. The older
+style of one-element or zero-length arrays should no longer be used[2].
+
+Refactor the code according to the use of a flexible-array member in
+struct icmsg_negotiate, instead of a one-element array.
+
+Also, this helps the ongoing efforts to enable -Warray-bounds and fix the
+following warnings:
+
+drivers/hv/channel_mgmt.c:315:23: warning: array subscript 1 is above array bounds of ‘struct ic_version[1]’ [-Warray-bounds]
+drivers/hv/channel_mgmt.c:316:23: warning: array subscript 1 is above array bounds of ‘struct ic_version[1]’ [-Warray-bounds]
+
+[1] https://en.wikipedia.org/wiki/Flexible_array_member
+[2] https://www.kernel.org/doc/html/v5.9/process/deprecated.html#zero-length-and-one-element-arrays
+
+Link: https://github.com/KSPP/linux/issues/79
+Link: https://github.com/KSPP/linux/issues/109
+Signed-off-by: Gustavo A. R. Silva <gustavoars@kernel.org>
+Reviewed-by: Michael Kelley <mikelley@microsoft.com>
+Link: https://lore.kernel.org/r/20210201174334.GA171933@embeddedor
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ include/linux/hyperv.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/include/linux/hyperv.h b/include/linux/hyperv.h
+--- a/include/linux/hyperv.h
++++ b/include/linux/hyperv.h
+@@ -1529,14 +1529,14 @@ struct icmsg_hdr {
+ #define IC_VERSION_NEGOTIATION_MAX_VER_COUNT 100
+ #define ICMSG_HDR (sizeof(struct vmbuspipe_hdr) + sizeof(struct icmsg_hdr))
+ #define ICMSG_NEGOTIATE_PKT_SIZE(icframe_vercnt, icmsg_vercnt) \
+-	(ICMSG_HDR + offsetof(struct icmsg_negotiate, icversion_data) + \
++	(ICMSG_HDR + sizeof(struct icmsg_negotiate) + \
+ 	 (((icframe_vercnt) + (icmsg_vercnt)) * sizeof(struct ic_version)))
+ 
+ struct icmsg_negotiate {
+ 	u16 icframe_vercnt;
+ 	u16 icmsg_vercnt;
+ 	u32 reserved;
+-	struct ic_version icversion_data[1]; /* any size array */
++	struct ic_version icversion_data[]; /* any size array */
+ } __packed;
+ 
+ struct shutdown_msg_data {
