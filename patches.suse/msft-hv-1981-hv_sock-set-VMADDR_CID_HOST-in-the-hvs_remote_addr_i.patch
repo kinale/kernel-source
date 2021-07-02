@@ -1,0 +1,32 @@
+From: Stefano Garzarella <sgarzare@redhat.com>
+Date: Thu, 14 Nov 2019 10:57:45 +0100
+Patch-mainline: v5.5-rc1
+Subject: hv_sock: set VMADDR_CID_HOST in the hvs_remote_addr_init()
+Git-commit: 039642574cc4ff77b1c8ca042c879fa6995ce154
+References: bsc#1186071
+
+Remote peer is always the host, so we set VMADDR_CID_HOST as
+remote CID instead of VMADDR_CID_ANY.
+
+Reviewed-by: Dexuan Cui <decui@microsoft.com>
+Reviewed-by: Stefan Hajnoczi <stefanha@redhat.com>
+Signed-off-by: Stefano Garzarella <sgarzare@redhat.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ net/vmw_vsock/hyperv_transport.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/net/vmw_vsock/hyperv_transport.c b/net/vmw_vsock/hyperv_transport.c
+--- a/net/vmw_vsock/hyperv_transport.c
++++ b/net/vmw_vsock/hyperv_transport.c
+@@ -188,7 +188,8 @@ static void hvs_remote_addr_init(struct sockaddr_vm *remote,
+ 	static u32 host_ephemeral_port = MIN_HOST_EPHEMERAL_PORT;
+ 	struct sock *sk;
+ 
+-	vsock_addr_init(remote, VMADDR_CID_ANY, VMADDR_PORT_ANY);
++	/* Remote peer is always the host */
++	vsock_addr_init(remote, VMADDR_CID_HOST, VMADDR_PORT_ANY);
+ 
+ 	while (1) {
+ 		/* Wrap around ? */
