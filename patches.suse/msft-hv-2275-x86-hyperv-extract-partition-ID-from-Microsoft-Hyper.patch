@@ -1,0 +1,106 @@
+From: Wei Liu <wei.liu@kernel.org>
+Date: Wed, 3 Feb 2021 15:04:25 +0000
+Patch-mainline: v5.12-rc1
+Subject: x86/hyperv: extract partition ID from Microsoft Hypervisor if necessary
+Git-commit: 99a0f46af6a7715147e81c558d558021aad4e207
+References: bsc#1186071
+
+We will need the partition ID for executing some hypercalls later.
+
+Signed-off-by: Lillian Grassin-Drake <ligrassi@microsoft.com>
+Co-Developed-by: Sunil Muthuswamy <sunilmut@microsoft.com>
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Reviewed-by: Michael Kelley <mikelley@microsoft.com>
+Link: https://lore.kernel.org/r/20210203150435.27941-7-wei.liu@kernel.org
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ arch/x86/hyperv/hv_init.c         | 26 ++++++++++++++++++++++++++
+ arch/x86/include/asm/mshyperv.h   |  2 ++
+ include/asm-generic/hyperv-tlfs.h |  6 ++++++
+ 3 files changed, 34 insertions(+)
+
+diff --git a/arch/x86/hyperv/hv_init.c b/arch/x86/hyperv/hv_init.c
+--- a/arch/x86/hyperv/hv_init.c
++++ b/arch/x86/hyperv/hv_init.c
+@@ -29,6 +29,8 @@
+ #include <clocksource/hyperv_timer.h>
+ 
+ int hyperv_init_cpuhp;
++u64 hv_current_partition_id = ~0ull;
++EXPORT_SYMBOL_GPL(hv_current_partition_id);
+ 
+ void *hv_hypercall_pg;
+ EXPORT_SYMBOL_GPL(hv_hypercall_pg);
+@@ -354,6 +356,24 @@ static void __init hv_stimer_setup_percpu_clockev(void)
+ 		old_setup_percpu_clockev();
+ }
+ 
++static void __init hv_get_partition_id(void)
++{
++	struct hv_get_partition_id *output_page;
++	u64 status;
++	unsigned long flags;
++
++	local_irq_save(flags);
++	output_page = *this_cpu_ptr(hyperv_pcpu_output_arg);
++	status = hv_do_hypercall(HVCALL_GET_PARTITION_ID, NULL, output_page);
++	if ((status & HV_HYPERCALL_RESULT_MASK) != HV_STATUS_SUCCESS) {
++		/* No point in proceeding if this failed */
++		pr_err("Failed to get partition ID: %lld\n", status);
++		BUG();
++	}
++	hv_current_partition_id = output_page->partition_id;
++	local_irq_restore(flags);
++}
++
+ /*
+  * This function is to be invoked early in the boot sequence after the
+  * hypervisor has been detected.
+@@ -454,6 +474,12 @@ void __init hyperv_init(void)
+ 	register_syscore_ops(&hv_syscore_ops);
+ 
+ 	hyperv_init_cpuhp = cpuhp;
++
++	if (cpuid_ebx(HYPERV_CPUID_FEATURES) & HV_ACCESS_PARTITION_ID)
++		hv_get_partition_id();
++
++	BUG_ON(hv_root_partition && hv_current_partition_id == ~0ull);
++
+ 	return;
+ 
+ remove_cpuhp_state:
+diff --git a/arch/x86/include/asm/mshyperv.h b/arch/x86/include/asm/mshyperv.h
+--- a/arch/x86/include/asm/mshyperv.h
++++ b/arch/x86/include/asm/mshyperv.h
+@@ -80,6 +80,8 @@ extern void *hv_hypercall_pg;
+ extern void  __percpu  **hyperv_pcpu_input_arg;
+ extern void  __percpu  **hyperv_pcpu_output_arg;
+ 
++extern u64 hv_current_partition_id;
++
+ static inline u64 hv_do_hypercall(u64 control, void *input, void *output)
+ {
+ 	u64 input_address = input ? virt_to_phys(input) : 0;
+diff --git a/include/asm-generic/hyperv-tlfs.h b/include/asm-generic/hyperv-tlfs.h
+--- a/include/asm-generic/hyperv-tlfs.h
++++ b/include/asm-generic/hyperv-tlfs.h
+@@ -142,6 +142,7 @@ struct ms_hyperv_tsc_page {
+ #define HVCALL_FLUSH_VIRTUAL_ADDRESS_SPACE_EX	0x0013
+ #define HVCALL_FLUSH_VIRTUAL_ADDRESS_LIST_EX	0x0014
+ #define HVCALL_SEND_IPI_EX			0x0015
++#define HVCALL_GET_PARTITION_ID			0x0046
+ #define HVCALL_GET_VP_REGISTERS			0x0050
+ #define HVCALL_SET_VP_REGISTERS			0x0051
+ #define HVCALL_POST_MESSAGE			0x005c
+@@ -408,6 +409,11 @@ struct hv_tlb_flush_ex {
+ 	u64 gva_list[];
+ } __packed;
+ 
++/* HvGetPartitionId hypercall (output only) */
++struct hv_get_partition_id {
++	u64 partition_id;
++} __packed;
++
+ /* HvRetargetDeviceInterrupt hypercall */
+ union hv_msi_entry {
+ 	u64 as_uint64;
