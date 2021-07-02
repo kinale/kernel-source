@@ -1,0 +1,90 @@
+From: Michael Kelley <mikelley@microsoft.com>
+Date: Tue, 2 Mar 2021 13:38:21 -0800
+Patch-mainline: v5.13-rc1
+Subject: clocksource/drivers/hyper-v: Set clocksource rating based on Hyper-V feature
+Git-commit: 4c78738ead4e195c7032c31fe56135c1b00e1784
+References: bsc#1186071
+
+On x86/x64, the TSC clocksource is available in a Hyper-V VM only if
+Hyper-V provides the TSC_INVARIANT flag. The rating on the Hyper-V
+Reference TSC page clocksource is currently set so that it will not
+override the TSC clocksource in this case.  Alternatively, if the TSC
+clocksource is not available, then the Hyper-V clocksource is used.
+
+But on ARM64, the Hyper-V Reference TSC page clocksource should
+override the ARM arch counter, since the Hyper-V clocksource provides
+scaling and offsetting during live migrations that is not provided
+for the ARM arch counter.
+
+To get the needed behavior for both x86/x64 and ARM64, tweak the
+logic by defaulting the Hyper-V Reference TSC page clocksource
+rating to a large value that will always override.  If the Hyper-V
+TSC_INVARIANT flag is set, then reduce the rating so that it will not
+override the TSC.
+
+While the logic for getting there is slightly different, the net
+result in the normal cases is no functional change.
+
+Signed-off-by: Michael Kelley <mikelley@microsoft.com>
+Acked-by: Daniel Lezcano <daniel.lezcano@linaro.org>
+Link: https://lore.kernel.org/r/1614721102-2241-10-git-send-email-mikelley@microsoft.com
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ drivers/clocksource/hyperv_timer.c | 23 +++++++++++++----------
+ 1 file changed, 13 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/clocksource/hyperv_timer.c b/drivers/clocksource/hyperv_timer.c
+--- a/drivers/clocksource/hyperv_timer.c
++++ b/drivers/clocksource/hyperv_timer.c
+@@ -302,14 +302,6 @@ EXPORT_SYMBOL_GPL(hv_stimer_global_cleanup);
+  * the other that uses the TSC reference page feature as defined in the
+  * TLFS.  The MSR version is for compatibility with old versions of
+  * Hyper-V and 32-bit x86.  The TSC reference page version is preferred.
+- *
+- * The Hyper-V clocksource ratings of 250 are chosen to be below the
+- * TSC clocksource rating of 300.  In configurations where Hyper-V offers
+- * an InvariantTSC, the TSC is not marked "unstable", so the TSC clocksource
+- * is available and preferred.  With the higher rating, it will be the
+- * default.  On older hardware and Hyper-V versions, the TSC is marked
+- * "unstable", so no TSC clocksource is created and the selected Hyper-V
+- * clocksource will be the default.
+  */
+ 
+ u64 (*hv_read_reference_counter)(void);
+@@ -380,7 +372,7 @@ static int hv_cs_enable(struct clocksource *cs)
+ 
+ static struct clocksource hyperv_cs_tsc = {
+ 	.name	= "hyperv_clocksource_tsc_page",
+-	.rating	= 250,
++	.rating	= 500,
+ 	.read	= read_hv_clock_tsc_cs,
+ 	.mask	= CLOCKSOURCE_MASK(64),
+ 	.flags	= CLOCK_SOURCE_IS_CONTINUOUS,
+@@ -417,7 +409,7 @@ static u64 notrace read_hv_sched_clock_msr(void)
+ 
+ static struct clocksource hyperv_cs_msr = {
+ 	.name	= "hyperv_clocksource_msr",
+-	.rating	= 250,
++	.rating	= 500,
+ 	.read	= read_hv_clock_msr_cs,
+ 	.mask	= CLOCKSOURCE_MASK(64),
+ 	.flags	= CLOCK_SOURCE_IS_CONTINUOUS,
+@@ -458,6 +450,17 @@ static bool __init hv_init_tsc_clocksource(void)
+ 	if (hv_root_partition)
+ 		return false;
+ 
++	/*
++	 * If Hyper-V offers TSC_INVARIANT, then the virtualized TSC correctly
++	 * handles frequency and offset changes due to live migration,
++	 * pause/resume, and other VM management operations.  So lower the
++	 * Hyper-V Reference TSC rating, causing the generic TSC to be used.
++	 * TSC_INVARIANT is not offered on ARM64, so the Hyper-V Reference
++	 * TSC will be preferred over the virtualized ARM64 arch counter.
++	 */
++	if (ms_hyperv.features & HV_ACCESS_TSC_INVARIANT)
++		hyperv_cs_tsc.rating = 250;
++
+ 	hv_read_reference_counter = read_hv_clock_tsc;
+ 	phys_addr = virt_to_phys(hv_get_tsc_page());
+ 
