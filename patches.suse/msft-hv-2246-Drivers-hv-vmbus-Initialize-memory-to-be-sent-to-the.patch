@@ -1,0 +1,45 @@
+From: "Andrea Parri (Microsoft)" <parri.andrea@gmail.com>
+Date: Wed, 9 Dec 2020 08:08:22 +0100
+Patch-mainline: v5.12-rc1
+Subject: Drivers: hv: vmbus: Initialize memory to be sent to the host
+Git-commit: e99c4afbee07e9323e9191a20b24d74dbf815bdf
+References: bsc#1183682
+
+__vmbus_open() and vmbus_teardown_gpadl() do not inizialite the memory
+for the vmbus_channel_open_channel and the vmbus_channel_gpadl_teardown
+objects they allocate respectively.  These objects contain padding bytes
+and fields that are left uninitialized and that are later sent to the
+host, potentially leaking guest data.  Zero initialize such fields to
+avoid leaking sensitive information to the host.
+
+Reported-by: Juan Vazquez <juvazq@microsoft.com>
+Signed-off-by: Andrea Parri (Microsoft) <parri.andrea@gmail.com>
+Reviewed-by: Michael Kelley <mikelley@microsoft.com>
+Link: https://lore.kernel.org/r/20201209070827.29335-2-parri.andrea@gmail.com
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ drivers/hv/channel.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/hv/channel.c b/drivers/hv/channel.c
+--- a/drivers/hv/channel.c
++++ b/drivers/hv/channel.c
+@@ -621,7 +621,7 @@ static int __vmbus_open(struct vmbus_channel *newchannel,
+ 		goto error_clean_ring;
+ 
+ 	/* Create and init the channel open message */
+-	open_info = kmalloc(sizeof(*open_info) +
++	open_info = kzalloc(sizeof(*open_info) +
+ 			   sizeof(struct vmbus_channel_open_channel),
+ 			   GFP_KERNEL);
+ 	if (!open_info) {
+@@ -748,7 +748,7 @@ int vmbus_teardown_gpadl(struct vmbus_channel *channel, u32 gpadl_handle)
+ 	unsigned long flags;
+ 	int ret;
+ 
+-	info = kmalloc(sizeof(*info) +
++	info = kzalloc(sizeof(*info) +
+ 		       sizeof(struct vmbus_channel_gpadl_teardown), GFP_KERNEL);
+ 	if (!info)
+ 		return -ENOMEM;
