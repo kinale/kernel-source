@@ -1,0 +1,110 @@
+From: Joseph Salisbury <joseph.salisbury@microsoft.com>
+Date: Fri, 16 Apr 2021 17:43:02 -0700
+Patch-mainline: v5.13-rc1
+Subject: x86/hyperv: Move hv_do_rep_hypercall to asm-generic
+Git-commit: 6523592cee4650c6aa997d69cd0045a01e07a1ef
+References: bsc#1186071
+
+This patch makes no functional changes.  It simply moves hv_do_rep_hypercall()
+out of arch/x86/include/asm/mshyperv.h and into asm-generic/mshyperv.h
+
+hv_do_rep_hypercall() is architecture independent, so it makes sense that it
+should be in the architecture independent mshyperv.h, not in the x86-specific
+mshyperv.h.
+
+This is done in preperation for a follow up patch which creates a consistent
+pattern for checking Hyper-V hypercall status.
+
+Signed-off-by: Joseph Salisbury <joseph.salisbury@microsoft.com>
+Reviewed-by: Michael Kelley <mikelley@microsoft.com>
+Link: https://lore.kernel.org/r/1618620183-9967-1-git-send-email-joseph.salisbury@linux.microsoft.com
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ arch/x86/include/asm/mshyperv.h | 32 --------------------------------
+ include/asm-generic/mshyperv.h  | 31 +++++++++++++++++++++++++++++++
+ 2 files changed, 31 insertions(+), 32 deletions(-)
+
+diff --git a/arch/x86/include/asm/mshyperv.h b/arch/x86/include/asm/mshyperv.h
+--- a/arch/x86/include/asm/mshyperv.h
++++ b/arch/x86/include/asm/mshyperv.h
+@@ -147,38 +147,6 @@ static inline u64 hv_do_fast_hypercall16(u16 code, u64 input1, u64 input2)
+ 	return hv_status;
+ }
+ 
+-/*
+- * Rep hypercalls. Callers of this functions are supposed to ensure that
+- * rep_count and varhead_size comply with Hyper-V hypercall definition.
+- */
+-static inline u64 hv_do_rep_hypercall(u16 code, u16 rep_count, u16 varhead_size,
+-				      void *input, void *output)
+-{
+-	u64 control = code;
+-	u64 status;
+-	u16 rep_comp;
+-
+-	control |= (u64)varhead_size << HV_HYPERCALL_VARHEAD_OFFSET;
+-	control |= (u64)rep_count << HV_HYPERCALL_REP_COMP_OFFSET;
+-
+-	do {
+-		status = hv_do_hypercall(control, input, output);
+-		if ((status & HV_HYPERCALL_RESULT_MASK) != HV_STATUS_SUCCESS)
+-			return status;
+-
+-		/* Bits 32-43 of status have 'Reps completed' data. */
+-		rep_comp = (status & HV_HYPERCALL_REP_COMP_MASK) >>
+-			HV_HYPERCALL_REP_COMP_OFFSET;
+-
+-		control &= ~HV_HYPERCALL_REP_START_MASK;
+-		control |= (u64)rep_comp << HV_HYPERCALL_REP_START_OFFSET;
+-
+-		touch_nmi_watchdog();
+-	} while (rep_comp < rep_count);
+-
+-	return status;
+-}
+-
+ extern struct hv_vp_assist_page **hv_vp_assist_page;
+ 
+ static inline struct hv_vp_assist_page *hv_get_vp_assist_page(unsigned int cpu)
+diff --git a/include/asm-generic/mshyperv.h b/include/asm-generic/mshyperv.h
+--- a/include/asm-generic/mshyperv.h
++++ b/include/asm-generic/mshyperv.h
+@@ -41,6 +41,37 @@ extern struct ms_hyperv_info ms_hyperv;
+ extern u64 hv_do_hypercall(u64 control, void *inputaddr, void *outputaddr);
+ extern u64 hv_do_fast_hypercall8(u16 control, u64 input8);
+ 
++/*
++ * Rep hypercalls. Callers of this functions are supposed to ensure that
++ * rep_count and varhead_size comply with Hyper-V hypercall definition.
++ */
++static inline u64 hv_do_rep_hypercall(u16 code, u16 rep_count, u16 varhead_size,
++				      void *input, void *output)
++{
++	u64 control = code;
++	u64 status;
++	u16 rep_comp;
++
++	control |= (u64)varhead_size << HV_HYPERCALL_VARHEAD_OFFSET;
++	control |= (u64)rep_count << HV_HYPERCALL_REP_COMP_OFFSET;
++
++	do {
++		status = hv_do_hypercall(control, input, output);
++		if ((status & HV_HYPERCALL_RESULT_MASK) != HV_STATUS_SUCCESS)
++			return status;
++
++		/* Bits 32-43 of status have 'Reps completed' data. */
++		rep_comp = (status & HV_HYPERCALL_REP_COMP_MASK) >>
++			HV_HYPERCALL_REP_COMP_OFFSET;
++
++		control &= ~HV_HYPERCALL_REP_START_MASK;
++		control |= (u64)rep_comp << HV_HYPERCALL_REP_START_OFFSET;
++
++		touch_nmi_watchdog();
++	} while (rep_comp < rep_count);
++
++	return status;
++}
+ 
+ /* Generate the guest OS identifier as described in the Hyper-V TLFS */
+ static inline  __u64 generate_guest_id(__u64 d_info1, __u64 kernel_version,
