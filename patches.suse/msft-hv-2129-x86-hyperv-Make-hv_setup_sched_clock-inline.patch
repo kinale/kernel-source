@@ -33,7 +33,7 @@ diff --git a/arch/x86/include/asm/mshyperv.h b/arch/x86/include/asm/mshyperv.h
  typedef int (*hyperv_fill_flush_list_func)(
  		struct hv_guest_mapping_flush_list *flush,
 @@ -54,6 +55,17 @@ typedef int (*hyperv_fill_flush_list_func)(
- 	((val).archdata.vclock_mode = VCLOCK_HVCLOCK)
+ 	vclocks_set_used(VCLOCK_HVCLOCK);
  #define hv_get_raw_timer() rdtsc_ordered()
  
 +/*
