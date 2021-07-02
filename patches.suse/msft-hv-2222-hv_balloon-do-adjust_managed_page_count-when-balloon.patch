@@ -1,0 +1,48 @@
+From: Vitaly Kuznetsov <vkuznets@redhat.com>
+Date: Wed, 2 Dec 2020 17:12:45 +0100
+Patch-mainline: v5.11-rc1
+Subject: hv_balloon: do adjust_managed_page_count() when ballooning/un-ballooning
+Git-commit: d1df458cbfdb0c3384c03c7fbcb1689bc02a746c
+References: bsc#1186071
+
+Unlike virtio_balloon/virtio_mem/xen balloon drivers, Hyper-V balloon driver
+does not adjust managed pages count when ballooning/un-ballooning and this leads
+to incorrect stats being reported, e.g. unexpected 'free' output.
+
+Note, the calculation in post_status() seems to remain correct: ballooned out
+pages are never 'available' and we manually add dm->num_pages_ballooned to
+'commited'.
+
+Suggested-by: David Hildenbrand <david@redhat.com>
+Signed-off-by: Vitaly Kuznetsov <vkuznets@redhat.com>
+Reviewed-by: David Hildenbrand <david@redhat.com>
+Link: https://lore.kernel.org/r/20201202161245.2406143-3-vkuznets@redhat.com
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ drivers/hv/hv_balloon.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/hv/hv_balloon.c b/drivers/hv/hv_balloon.c
+--- a/drivers/hv/hv_balloon.c
++++ b/drivers/hv/hv_balloon.c
+@@ -1198,6 +1198,7 @@ static void free_balloon_pages(struct hv_dynmem_device *dm,
+ 		__ClearPageOffline(pg);
+ 		__free_page(pg);
+ 		dm->num_pages_ballooned--;
++		adjust_managed_page_count(pg, 1);
+ 	}
+ }
+ 
+@@ -1238,8 +1239,10 @@ static unsigned int alloc_balloon_pages(struct hv_dynmem_device *dm,
+ 			split_page(pg, get_order(alloc_unit << PAGE_SHIFT));
+ 
+ 		/* mark all pages offline */
+-		for (j = 0; j < alloc_unit; j++)
++		for (j = 0; j < alloc_unit; j++) {
+ 			__SetPageOffline(pg + j);
++			adjust_managed_page_count(pg + j, -1);
++		}
+ 
+ 		bl_resp->range_count++;
+ 		bl_resp->range_array[i].finfo.start_page =
