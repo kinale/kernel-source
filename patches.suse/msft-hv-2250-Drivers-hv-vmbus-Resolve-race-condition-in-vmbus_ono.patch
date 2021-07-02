@@ -1,0 +1,59 @@
+From: "Andrea Parri (Microsoft)" <parri.andrea@gmail.com>
+Date: Wed, 9 Dec 2020 08:08:26 +0100
+Patch-mainline: v5.12-rc1
+Subject: Drivers: hv: vmbus: Resolve race condition in vmbus_onoffer_rescind()
+Git-commit: e4d221b42354b2e2ddb9187a806afb651eee2cda
+References: bsc#1183682
+
+An erroneous or malicious host could send multiple rescind messages for
+a same channel.  In vmbus_onoffer_rescind(), the guest maps the channel
+ID to obtain a pointer to the channel object and it eventually releases
+such object and associated data.  The host could time rescind messages
+and lead to an use-after-free.  Add a new flag to the channel structure
+to make sure that only one instance of vmbus_onoffer_rescind() can get
+the reference to the channel object.
+
+Reported-by: Juan Vazquez <juvazq@microsoft.com>
+Signed-off-by: Andrea Parri (Microsoft) <parri.andrea@gmail.com>
+Reviewed-by: Michael Kelley <mikelley@microsoft.com>
+Link: https://lore.kernel.org/r/20201209070827.29335-6-parri.andrea@gmail.com
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ drivers/hv/channel_mgmt.c | 12 ++++++++++++
+ include/linux/hyperv.h    |  1 +
+ 2 files changed, 13 insertions(+)
+
+diff --git a/drivers/hv/channel_mgmt.c b/drivers/hv/channel_mgmt.c
+--- a/drivers/hv/channel_mgmt.c
++++ b/drivers/hv/channel_mgmt.c
+@@ -1063,6 +1063,18 @@ static void vmbus_onoffer_rescind(struct vmbus_channel_message_header *hdr)
+ 
+ 	mutex_lock(&vmbus_connection.channel_mutex);
+ 	channel = relid2channel(rescind->child_relid);
++	if (channel != NULL) {
++		/*
++		 * Guarantee that no other instance of vmbus_onoffer_rescind()
++		 * has got a reference to the channel object.  Synchronize on
++		 * &vmbus_connection.channel_mutex.
++		 */
++		if (channel->rescind_ref) {
++			mutex_unlock(&vmbus_connection.channel_mutex);
++			return;
++		}
++		channel->rescind_ref = true;
++	}
+ 	mutex_unlock(&vmbus_connection.channel_mutex);
+ 
+ 	if (channel == NULL) {
+diff --git a/include/linux/hyperv.h b/include/linux/hyperv.h
+--- a/include/linux/hyperv.h
++++ b/include/linux/hyperv.h
+@@ -809,6 +809,7 @@ struct vmbus_channel {
+ 	u8 monitor_bit;
+ 
+ 	bool rescind; /* got rescind msg */
++	bool rescind_ref; /* got rescind msg, got channel reference */
+ 	struct completion rescind_event;
+ 
+ 	u32 ringbuffer_gpadlhandle;
