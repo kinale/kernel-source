@@ -70,8 +70,8 @@ diff --git a/drivers/scsi/storvsc_drv.c b/drivers/scsi/storvsc_drv.c
 -			((unsigned long)desc->trans_id);
 +		request = (struct storvsc_cmd_request *)(unsigned long)cmd_rqst;
  
- 		if (hv_pkt_datalen(desc) < sizeof(struct vstor_packet) - vmscsi_size_delta) {
- 			dev_err(&device->device, "Invalid packet len\n");
+ 		if (request == &stor_device->init_request ||
+ 		    request == &stor_device->reset_request) {
 @@ -1265,6 +1280,12 @@ static int storvsc_connect_to_vsp(struct hv_device *device, u32 ring_size,
  
  	memset(&props, 0, sizeof(struct vmstorage_channel_properties));
