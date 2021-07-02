@@ -1,0 +1,100 @@
+From: Wei Liu <wei.liu@kernel.org>
+Date: Wed, 3 Feb 2021 15:04:21 +0000
+Patch-mainline: v5.12-rc1
+Subject: x86/hyperv: detect if Linux is the root partition
+Git-commit: e997720202b363ba8000d769f114e3c2c5822227
+References: bsc#1186071
+
+For now we can use the privilege flag to check. Stash the value to be
+used later.
+
+Put in a bunch of defines for future use when we want to have more
+fine-grained detection.
+
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Reviewed-by: Pavel Tatashin <pasha.tatashin@soleen.com>
+Reviewed-by: Michael Kelley <mikelley@microsoft.com>
+Link: https://lore.kernel.org/r/20210203150435.27941-3-wei.liu@kernel.org
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ arch/x86/include/asm/hyperv-tlfs.h | 10 ++++++++++
+ arch/x86/include/asm/mshyperv.h    |  2 ++
+ arch/x86/kernel/cpu/mshyperv.c     | 20 ++++++++++++++++++++
+ 3 files changed, 32 insertions(+)
+
+diff --git a/arch/x86/include/asm/hyperv-tlfs.h b/arch/x86/include/asm/hyperv-tlfs.h
+--- a/arch/x86/include/asm/hyperv-tlfs.h
++++ b/arch/x86/include/asm/hyperv-tlfs.h
+@@ -21,6 +21,7 @@
+ #define HYPERV_CPUID_FEATURES			0x40000003
+ #define HYPERV_CPUID_ENLIGHTMENT_INFO		0x40000004
+ #define HYPERV_CPUID_IMPLEMENT_LIMITS		0x40000005
++#define HYPERV_CPUID_CPU_MANAGEMENT_FEATURES	0x40000007
+ #define HYPERV_CPUID_NESTED_FEATURES		0x4000000A
+ #define HYPERV_CPUID_ISOLATION_CONFIG		0x4000000C
+ 
+@@ -111,6 +112,15 @@
+ /* Recommend using enlightened VMCS */
+ #define HV_X64_ENLIGHTENED_VMCS_RECOMMENDED		BIT(14)
+ 
++/*
++ * CPU management features identification.
++ * These are HYPERV_CPUID_CPU_MANAGEMENT_FEATURES.EAX bits.
++ */
++#define HV_X64_START_LOGICAL_PROCESSOR			BIT(0)
++#define HV_X64_CREATE_ROOT_VIRTUAL_PROCESSOR		BIT(1)
++#define HV_X64_PERFORMANCE_COUNTER_SYNC			BIT(2)
++#define HV_X64_RESERVED_IDENTITY_BIT			BIT(31)
++
+ /*
+  * Virtual processor will never share a physical core with another virtual
+  * processor, except for virtual processors that are reported as sibling SMT
+diff --git a/arch/x86/include/asm/mshyperv.h b/arch/x86/include/asm/mshyperv.h
+--- a/arch/x86/include/asm/mshyperv.h
++++ b/arch/x86/include/asm/mshyperv.h
+@@ -239,6 +239,8 @@ int hyperv_fill_flush_guest_mapping_list(
+ 		struct hv_guest_mapping_flush_list *flush,
+ 		u64 start_gfn, u64 end_gfn);
+ 
++extern bool hv_root_partition;
++
+ #ifdef CONFIG_X86_64
+ void hv_apic_init(void);
+ void __init hv_init_spinlocks(void);
+diff --git a/arch/x86/kernel/cpu/mshyperv.c b/arch/x86/kernel/cpu/mshyperv.c
+--- a/arch/x86/kernel/cpu/mshyperv.c
++++ b/arch/x86/kernel/cpu/mshyperv.c
+@@ -32,6 +32,10 @@
+ #include <asm/nmi.h>
+ #include <clocksource/hyperv_timer.h>
+ 
++/* Is Linux running as the root partition? */
++bool hv_root_partition;
++EXPORT_SYMBOL_GPL(hv_root_partition);
++
+ struct ms_hyperv_info ms_hyperv;
+ EXPORT_SYMBOL_GPL(ms_hyperv);
+ 
+@@ -256,6 +260,22 @@ static void __init ms_hyperv_init_platform(void)
+ 	pr_debug("Hyper-V: max %u virtual processors, %u logical processors\n",
+ 		 ms_hyperv.max_vp_index, ms_hyperv.max_lp_index);
+ 
++	/*
++	 * Check CPU management privilege.
++	 *
++	 * To mirror what Windows does we should extract CPU management
++	 * features and use the ReservedIdentityBit to detect if Linux is the
++	 * root partition. But that requires negotiating CPU management
++	 * interface (a process to be finalized).
++	 *
++	 * For now, use the privilege flag as the indicator for running as
++	 * root.
++	 */
++	if (cpuid_ebx(HYPERV_CPUID_FEATURES) & HV_CPU_MANAGEMENT) {
++		hv_root_partition = true;
++		pr_info("Hyper-V: running as root partition\n");
++	}
++
+ 	/*
+ 	 * Extract host information.
+ 	 */
