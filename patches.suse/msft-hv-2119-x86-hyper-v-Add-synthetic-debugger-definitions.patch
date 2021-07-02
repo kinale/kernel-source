@@ -1,0 +1,100 @@
+From: Jon Doron <arilou@gmail.com>
+Date: Fri, 29 May 2020 16:45:39 +0300
+Patch-mainline: v5.8-rc1
+Subject: x86/hyper-v: Add synthetic debugger definitions
+Git-commit: 22ad0026d0978d4211eb07a2be77f49fb40d86eb
+References: bsc#1186071
+
+Hyper-V synthetic debugger has two modes, one that uses MSRs and
+the other that use Hypercalls.
+
+Add all the required definitions to both types of synthetic debugger
+interface.
+
+Some of the required new CPUIDs and MSRs are not documented in the TLFS
+so they are in hyperv.h instead.
+
+The reason they are not documented is because they are subjected to be
+removed in future versions of Windows.
+
+Reviewed-by: Michael Kelley <mikelley@microsoft.com>
+Signed-off-by: Jon Doron <arilou@gmail.com>
+Message-Id: <20200529134543.1127440-3-arilou@gmail.com>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ arch/x86/include/asm/hyperv-tlfs.h |  6 ++++++
+ include/asm-generic/hyperv-tlfs.h |  6 ++++++
+ arch/x86/kvm/hyperv.h              | 27 +++++++++++++++++++++++++++
+ 2 files changed, 33 insertions(+)
+
+diff --git a/arch/x86/include/asm/hyperv-tlfs.h b/arch/x86/include/asm/hyperv-tlfs.h
+--- a/arch/x86/include/asm/hyperv-tlfs.h
++++ b/arch/x86/include/asm/hyperv-tlfs.h
+@@ -131,6 +131,8 @@
+ #define HV_FEATURE_FREQUENCY_MSRS_AVAILABLE		BIT(8)
+ /* Crash MSR available */
+ #define HV_FEATURE_GUEST_CRASH_MSR_AVAILABLE		BIT(10)
++/* Support for debug MSRs available */
++#define HV_FEATURE_DEBUG_MSRS_AVAILABLE			BIT(11)
+ /* stimer Direct Mode is available */
+ #define HV_STIMER_DIRECT_MODE_AVAILABLE			BIT(19)
+ 
+diff --git a/include/asm-generic/hyperv-tlfs.h b/include/asm-generic/hyperv-tlfs.h
+--- a/include/asm-generic/hyperv-tlfs.h
++++ b/include/asm-generic/hyperv-tlfs.h
+@@ -376,6 +378,9 @@ struct hv_tsc_emulation_status {
+ #define HVCALL_SET_VP_REGISTERS			0x0051
+ #define HVCALL_POST_MESSAGE			0x005c
+ #define HVCALL_SIGNAL_EVENT			0x005d
++#define HVCALL_POST_DEBUG_DATA			0x0069
++#define HVCALL_RETRIEVE_DEBUG_DATA		0x006a
++#define HVCALL_RESET_DEBUG_SESSION		0x006b
+ #define HVCALL_RETARGET_INTERRUPT		0x007e
+ #define HVCALL_FLUSH_GUEST_PHYSICAL_ADDRESS_SPACE 0x00af
+ #define HVCALL_FLUSH_GUEST_PHYSICAL_ADDRESS_LIST 0x00b0
+@@ -422,6 +427,7 @@ enum HV_GENERIC_SET_FORMAT {
+ #define HV_STATUS_INVALID_HYPERCALL_INPUT	3
+ #define HV_STATUS_INVALID_ALIGNMENT		4
+ #define HV_STATUS_INVALID_PARAMETER		5
++#define HV_STATUS_OPERATION_DENIED		8
+ #define HV_STATUS_INSUFFICIENT_MEMORY		11
+ #define HV_STATUS_INVALID_PORT_ID		17
+ #define HV_STATUS_INVALID_CONNECTION_ID		18
+diff --git a/arch/x86/kvm/hyperv.h b/arch/x86/kvm/hyperv.h
+--- a/arch/x86/kvm/hyperv.h
++++ b/arch/x86/kvm/hyperv.h
+@@ -23,6 +23,33 @@
+ 
+ #include <linux/kvm_host.h>
+ 
++/*
++ * The #defines related to the synthetic debugger are required by KDNet, but
++ * they are not documented in the Hyper-V TLFS because the synthetic debugger
++ * functionality has been deprecated and is subject to removal in future
++ * versions of Windows.
++ */
++#define HYPERV_CPUID_SYNDBG_VENDOR_AND_MAX_FUNCTIONS	0x40000080
++#define HYPERV_CPUID_SYNDBG_INTERFACE			0x40000081
++#define HYPERV_CPUID_SYNDBG_PLATFORM_CAPABILITIES	0x40000082
++
++/*
++ * Hyper-V synthetic debugger platform capabilities
++ * These are HYPERV_CPUID_SYNDBG_PLATFORM_CAPABILITIES.EAX bits.
++ */
++#define HV_X64_SYNDBG_CAP_ALLOW_KERNEL_DEBUGGING	BIT(1)
++
++/* Hyper-V Synthetic debug options MSR */
++#define HV_X64_MSR_SYNDBG_CONTROL		0x400000F1
++#define HV_X64_MSR_SYNDBG_STATUS		0x400000F2
++#define HV_X64_MSR_SYNDBG_SEND_BUFFER		0x400000F3
++#define HV_X64_MSR_SYNDBG_RECV_BUFFER		0x400000F4
++#define HV_X64_MSR_SYNDBG_PENDING_BUFFER	0x400000F5
++#define HV_X64_MSR_SYNDBG_OPTIONS		0x400000FF
++
++/* Hyper-V HV_X64_MSR_SYNDBG_OPTIONS bits */
++#define HV_X64_SYNDBG_OPTION_USE_HCALLS		BIT(2)
++
+ static inline struct kvm_vcpu_hv *vcpu_to_hv_vcpu(struct kvm_vcpu *vcpu)
+ {
+ 	return &vcpu->arch.hyperv;
