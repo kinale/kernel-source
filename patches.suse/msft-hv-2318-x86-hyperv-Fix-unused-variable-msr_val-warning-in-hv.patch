@@ -1,0 +1,61 @@
+From: Xu Yihang <xuyihang@huawei.com>
+Date: Tue, 23 Mar 2021 10:43:02 +0800
+Patch-mainline: v5.13-rc1
+Subject: x86/hyperv: Fix unused variable 'msr_val' warning in hv_qlock_wait
+Git-commit: 13c4d4626a4b205e496eb65d6316a3dcb89a7d62
+References: bsc#1186071
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fixes the following W=1 kernel build warning(s):
+arch/x86/hyperv/hv_spinlock.c:28:16: warning: variable ‘msr_val’ set but not used [-Wunused-but-set-variable]
+  unsigned long msr_val;
+
+As Hypervisor Top-Level Functional Specification states in chapter 7.5
+Virtual Processor Idle Sleep State, "A partition which possesses the
+AccessGuestIdleMsr privilege (refer to section 4.2.2) may trigger entry
+into the virtual processor idle sleep state through a read to the
+hypervisor-defined MSR HV_X64_MSR_GUEST_IDLE".
+
+That means only a read of the MSR is necessary. The returned value
+msr_val is not used. Cast it to void to silence this warning.
+
+Reference:
+https://docs.microsoft.com/en-us/virtualization/hyper-v-on-windows/reference/tlfs
+
+Reported-by: Hulk Robot <hulkci@huawei.com>
+Signed-off-by: Xu Yihang <xuyihang@huawei.com>
+Link: https://lore.kernel.org/r/20210323024302.174434-1-xuyihang@huawei.com
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ arch/x86/hyperv/hv_spinlock.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/arch/x86/hyperv/hv_spinlock.c b/arch/x86/hyperv/hv_spinlock.c
+--- a/arch/x86/hyperv/hv_spinlock.c
++++ b/arch/x86/hyperv/hv_spinlock.c
+@@ -25,7 +25,6 @@ static void hv_qlock_kick(int cpu)
+ 
+ static void hv_qlock_wait(u8 *byte, u8 val)
+ {
+-	unsigned long msr_val;
+ 	unsigned long flags;
+ 
+ 	if (in_nmi())
+@@ -48,8 +47,13 @@ static void hv_qlock_wait(u8 *byte, u8 val)
+ 	/*
+ 	 * Only issue the rdmsrl() when the lock state has not changed.
+ 	 */
+-	if (READ_ONCE(*byte) == val)
++	if (READ_ONCE(*byte) == val) {
++		unsigned long msr_val;
++
+ 		rdmsrl(HV_X64_MSR_GUEST_IDLE, msr_val);
++
++		(void)msr_val;
++	}
+ 	local_irq_restore(flags);
+ }
+ 
