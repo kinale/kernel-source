@@ -1,0 +1,32 @@
+From: Wei Liu <wei.liu@kernel.org>
+Date: Wed, 3 Feb 2021 15:04:22 +0000
+Patch-mainline: v5.12-rc1
+Subject: Drivers: hv: vmbus: skip VMBus initialization if Linux is root
+Git-commit: 7e279d78664aa91107ebff4b03eca367967f5908
+References: bsc#1186071
+
+There is no VMBus and the other infrastructures initialized in
+hv_acpi_init when Linux is running as the root partition.
+
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Reviewed-by: Pavel Tatashin <pasha.tatashin@soleen.com>
+Reviewed-by: Michael Kelley <mikelley@microsoft.com>
+Link: https://lore.kernel.org/r/20210203150435.27941-4-wei.liu@kernel.org
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ drivers/hv/vmbus_drv.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/hv/vmbus_drv.c b/drivers/hv/vmbus_drv.c
+--- a/drivers/hv/vmbus_drv.c
++++ b/drivers/hv/vmbus_drv.c
+@@ -2645,6 +2645,9 @@ static int __init hv_acpi_init(void)
+ 	if (!hv_is_hyperv_initialized())
+ 		return -ENODEV;
+ 
++	if (hv_root_partition)
++		return 0;
++
+ 	init_completion(&probe_event);
+ 
+ 	/*
