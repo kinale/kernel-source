@@ -1,0 +1,286 @@
+From: "Andrea Parri (Microsoft)" <parri.andrea@gmail.com>
+Date: Fri, 16 Apr 2021 16:34:48 +0200
+Patch-mainline: v5.13-rc1
+Subject: Drivers: hv: vmbus: Drivers: hv: vmbus: Introduce CHANNELMSG_MODIFYCHANNEL_RESPONSE
+Git-commit: 870ced0548c895eb0bf8d982400344e5a9b2df00
+References: bsc#1186071
+
+Introduce the CHANNELMSG_MODIFYCHANNEL_RESPONSE message type, and code
+to receive and process such a message.
+
+Signed-off-by: Andrea Parri (Microsoft) <parri.andrea@gmail.com>
+Reviewed-by: Michael Kelley <mikelley@microsoft.com>
+Link: https://lore.kernel.org/r/20210416143449.16185-3-parri.andrea@gmail.com
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ drivers/hv/channel.c      | 99 +++++++++++++++++++++++++++++++++++++++--------
+ drivers/hv/channel_mgmt.c | 42 ++++++++++++++++++++
+ drivers/hv/hv_trace.h     | 15 +++++++
+ drivers/hv/vmbus_drv.c    |  4 +-
+ include/linux/hyperv.h    | 11 +++++-
+ 5 files changed, 152 insertions(+), 19 deletions(-)
+
+diff --git a/drivers/hv/channel.c b/drivers/hv/channel.c
+--- a/drivers/hv/channel.c
++++ b/drivers/hv/channel.c
+@@ -209,31 +209,96 @@ int vmbus_send_tl_connect_request(const guid_t *shv_guest_servie_id,
+ }
+ EXPORT_SYMBOL_GPL(vmbus_send_tl_connect_request);
+ 
++static int send_modifychannel_without_ack(struct vmbus_channel *channel, u32 target_vp)
++{
++	struct vmbus_channel_modifychannel msg;
++	int ret;
++
++	memset(&msg, 0, sizeof(msg));
++	msg.header.msgtype = CHANNELMSG_MODIFYCHANNEL;
++	msg.child_relid = channel->offermsg.child_relid;
++	msg.target_vp = target_vp;
++
++	ret = vmbus_post_msg(&msg, sizeof(msg), true);
++	trace_vmbus_send_modifychannel(&msg, ret);
++
++	return ret;
++}
++
++static int send_modifychannel_with_ack(struct vmbus_channel *channel, u32 target_vp)
++{
++	struct vmbus_channel_modifychannel *msg;
++	struct vmbus_channel_msginfo *info;
++	unsigned long flags;
++	int ret;
++
++	info = kzalloc(sizeof(struct vmbus_channel_msginfo) +
++				sizeof(struct vmbus_channel_modifychannel),
++		       GFP_KERNEL);
++	if (!info)
++		return -ENOMEM;
++
++	init_completion(&info->waitevent);
++	info->waiting_channel = channel;
++
++	msg = (struct vmbus_channel_modifychannel *)info->msg;
++	msg->header.msgtype = CHANNELMSG_MODIFYCHANNEL;
++	msg->child_relid = channel->offermsg.child_relid;
++	msg->target_vp = target_vp;
++
++	spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
++	list_add_tail(&info->msglistentry, &vmbus_connection.chn_msg_list);
++	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
++
++	ret = vmbus_post_msg(msg, sizeof(*msg), true);
++	trace_vmbus_send_modifychannel(msg, ret);
++	if (ret != 0) {
++		spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
++		list_del(&info->msglistentry);
++		spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
++		goto free_info;
++	}
++
++	/*
++	 * Release channel_mutex; otherwise, vmbus_onoffer_rescind() could block on
++	 * the mutex and be unable to signal the completion.
++	 *
++	 * See the caller target_cpu_store() for information about the usage of the
++	 * mutex.
++	 */
++	mutex_unlock(&vmbus_connection.channel_mutex);
++	wait_for_completion(&info->waitevent);
++	mutex_lock(&vmbus_connection.channel_mutex);
++
++	spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
++	list_del(&info->msglistentry);
++	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
++
++	if (info->response.modify_response.status)
++		ret = -EAGAIN;
++
++free_info:
++	kfree(info);
++	return ret;
++}
++
+ /*
+  * Set/change the vCPU (@target_vp) the channel (@child_relid) will interrupt.
+  *
+- * CHANNELMSG_MODIFYCHANNEL messages are aynchronous.  Also, Hyper-V does not
+- * ACK such messages.  IOW we can't know when the host will stop interrupting
+- * the "old" vCPU and start interrupting the "new" vCPU for the given channel.
++ * CHANNELMSG_MODIFYCHANNEL messages are aynchronous.  When VMbus version 5.3
++ * or later is negotiated, Hyper-V always sends an ACK in response to such a
++ * message.  For VMbus version 5.2 and earlier, it never sends an ACK.  With-
++ * out an ACK, we can not know when the host will stop interrupting the "old"
++ * vCPU and start interrupting the "new" vCPU for the given channel.
+  *
+  * The CHANNELMSG_MODIFYCHANNEL message type is supported since VMBus version
+  * VERSION_WIN10_V4_1.
+  */
+-int vmbus_send_modifychannel(u32 child_relid, u32 target_vp)
++int vmbus_send_modifychannel(struct vmbus_channel *channel, u32 target_vp)
+ {
+-	struct vmbus_channel_modifychannel conn_msg;
+-	int ret;
+-
+-	memset(&conn_msg, 0, sizeof(conn_msg));
+-	conn_msg.header.msgtype = CHANNELMSG_MODIFYCHANNEL;
+-	conn_msg.child_relid = child_relid;
+-	conn_msg.target_vp = target_vp;
+-
+-	ret = vmbus_post_msg(&conn_msg, sizeof(conn_msg), true);
+-
+-	trace_vmbus_send_modifychannel(&conn_msg, ret);
+-
+-	return ret;
++	if (vmbus_proto_version >= VERSION_WIN10_V5_3)
++		return send_modifychannel_with_ack(channel, target_vp);
++	return send_modifychannel_without_ack(channel, target_vp);
+ }
+ EXPORT_SYMBOL_GPL(vmbus_send_modifychannel);
+ 
+diff --git a/drivers/hv/channel_mgmt.c b/drivers/hv/channel_mgmt.c
+--- a/drivers/hv/channel_mgmt.c
++++ b/drivers/hv/channel_mgmt.c
+@@ -1311,6 +1311,46 @@ static void vmbus_ongpadl_created(struct vmbus_channel_message_header *hdr)
+ 	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
+ }
+ 
++/*
++ * vmbus_onmodifychannel_response - Modify Channel response handler.
++ *
++ * This is invoked when we received a response to our channel modify request.
++ * Find the matching request, copy the response and signal the requesting thread.
++ */
++static void vmbus_onmodifychannel_response(struct vmbus_channel_message_header *hdr)
++{
++	struct vmbus_channel_modifychannel_response *response;
++	struct vmbus_channel_msginfo *msginfo;
++	unsigned long flags;
++
++	response = (struct vmbus_channel_modifychannel_response *)hdr;
++
++	trace_vmbus_onmodifychannel_response(response);
++
++	/*
++	 * Find the modify msg, copy the response and signal/unblock the wait event.
++	 */
++	spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
++
++	list_for_each_entry(msginfo, &vmbus_connection.chn_msg_list, msglistentry) {
++		struct vmbus_channel_message_header *responseheader =
++				(struct vmbus_channel_message_header *)msginfo->msg;
++
++		if (responseheader->msgtype == CHANNELMSG_MODIFYCHANNEL) {
++			struct vmbus_channel_modifychannel *modifymsg;
++
++			modifymsg = (struct vmbus_channel_modifychannel *)msginfo->msg;
++			if (modifymsg->child_relid == response->child_relid) {
++				memcpy(&msginfo->response.modify_response, response,
++				       sizeof(*response));
++				complete(&msginfo->waitevent);
++				break;
++			}
++		}
++	}
++	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
++}
++
+ /*
+  * vmbus_ongpadl_torndown - GPADL torndown handler.
+  *
+@@ -1428,6 +1468,8 @@ channel_message_table[CHANNELMSG_COUNT] = {
+ 	{ CHANNELMSG_TL_CONNECT_REQUEST,	0, NULL, 0},
+ 	{ CHANNELMSG_MODIFYCHANNEL,		0, NULL, 0},
+ 	{ CHANNELMSG_TL_CONNECT_RESULT,		0, NULL, 0},
++	{ CHANNELMSG_MODIFYCHANNEL_RESPONSE,	1, vmbus_onmodifychannel_response,
++		sizeof(struct vmbus_channel_modifychannel_response)},
+ };
+ 
+ /*
+diff --git a/drivers/hv/hv_trace.h b/drivers/hv/hv_trace.h
+--- a/drivers/hv/hv_trace.h
++++ b/drivers/hv/hv_trace.h
+@@ -103,6 +103,21 @@ TRACE_EVENT(vmbus_ongpadl_created,
+ 		    )
+ 	);
+ 
++TRACE_EVENT(vmbus_onmodifychannel_response,
++	    TP_PROTO(const struct vmbus_channel_modifychannel_response *response),
++	    TP_ARGS(response),
++	    TP_STRUCT__entry(
++		    __field(u32, child_relid)
++		    __field(u32, status)
++		    ),
++	    TP_fast_assign(__entry->child_relid = response->child_relid;
++			   __entry->status = response->status;
++		    ),
++	    TP_printk("child_relid 0x%x, status %d",
++		      __entry->child_relid,  __entry->status
++		    )
++	);
++
+ TRACE_EVENT(vmbus_ongpadl_torndown,
+ 	    TP_PROTO(const struct vmbus_channel_gpadl_torndown *gpadltorndown),
+ 	    TP_ARGS(gpadltorndown),
+diff --git a/drivers/hv/vmbus_drv.c b/drivers/hv/vmbus_drv.c
+--- a/drivers/hv/vmbus_drv.c
++++ b/drivers/hv/vmbus_drv.c
+@@ -1848,13 +1848,15 @@ static ssize_t target_cpu_store(struct vmbus_channel *channel,
+ 	if (target_cpu == origin_cpu)
+ 		goto cpu_store_unlock;
+ 
+-	if (vmbus_send_modifychannel(channel->offermsg.child_relid,
++	if (vmbus_send_modifychannel(channel,
+ 				     hv_cpu_number_to_vp_number(target_cpu))) {
+ 		ret = -EIO;
+ 		goto cpu_store_unlock;
+ 	}
+ 
+ 	/*
++	 * For version before VERSION_WIN10_V5_3, the following warning holds:
++	 *
+ 	 * Warning.  At this point, there is *no* guarantee that the host will
+ 	 * have successfully processed the vmbus_send_modifychannel() request.
+ 	 * See the header comment of vmbus_send_modifychannel() for more info.
+diff --git a/include/linux/hyperv.h b/include/linux/hyperv.h
+--- a/include/linux/hyperv.h
++++ b/include/linux/hyperv.h
+@@ -477,6 +477,7 @@ enum vmbus_channel_message_type {
+ 	CHANNELMSG_TL_CONNECT_REQUEST		= 21,
+ 	CHANNELMSG_MODIFYCHANNEL		= 22,
+ 	CHANNELMSG_TL_CONNECT_RESULT		= 23,
++	CHANNELMSG_MODIFYCHANNEL_RESPONSE	= 24,
+ 	CHANNELMSG_COUNT
+ };
+ 
+@@ -590,6 +591,13 @@ struct vmbus_channel_open_result {
+ 	u32 status;
+ } __packed;
+ 
++/* Modify Channel Result parameters */
++struct vmbus_channel_modifychannel_response {
++	struct vmbus_channel_message_header header;
++	u32 child_relid;
++	u32 status;
++} __packed;
++
+ /* Close channel parameters; */
+ struct vmbus_channel_close_channel {
+ 	struct vmbus_channel_message_header header;
+@@ -722,6 +730,7 @@ struct vmbus_channel_msginfo {
+ 		struct vmbus_channel_gpadl_torndown gpadl_torndown;
+ 		struct vmbus_channel_gpadl_created gpadl_created;
+ 		struct vmbus_channel_version_response version_response;
++		struct vmbus_channel_modifychannel_response modify_response;
+ 	} response;
+ 
+ 	u32 msgsize;
+@@ -1596,7 +1605,7 @@ extern __u32 vmbus_proto_version;
+ 
+ int vmbus_send_tl_connect_request(const guid_t *shv_guest_servie_id,
+ 				  const guid_t *shv_host_servie_id);
+-int vmbus_send_modifychannel(u32 child_relid, u32 target_vp);
++int vmbus_send_modifychannel(struct vmbus_channel *channel, u32 target_vp);
+ void vmbus_set_event(struct vmbus_channel *channel);
+ 
+ /* Get the start of the ring buffer. */
