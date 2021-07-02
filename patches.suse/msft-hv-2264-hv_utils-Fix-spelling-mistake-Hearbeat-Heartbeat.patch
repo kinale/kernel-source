@@ -1,0 +1,29 @@
+From: Colin Ian King <colin.king@canonical.com>
+Date: Wed, 27 Jan 2021 23:31:36 +0000
+Patch-mainline: v5.12-rc1
+Subject: hv_utils: Fix spelling mistake "Hearbeat" -> "Heartbeat"
+Git-commit: bdb49526d25b076af4bd31b2fc66986ff0df1127
+References: bsc#1186071
+
+There is a spelling mistake in an error message. Fix it.
+
+Signed-off-by: Colin Ian King <colin.king@canonical.com>
+Link: https://lore.kernel.org/r/20210127233136.623465-1-colin.king@canonical.com
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ drivers/hv/hv_util.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/hv/hv_util.c b/drivers/hv/hv_util.c
+--- a/drivers/hv/hv_util.c
++++ b/drivers/hv/hv_util.c
+@@ -507,7 +507,7 @@ static void heartbeat_onchannelcallback(void *context)
+ 
+ 		/* Ensure recvlen is big enough to read header data */
+ 		if (recvlen < ICMSG_HDR) {
+-			pr_err_ratelimited("Hearbeat request received. Packet length too small: %d\n",
++			pr_err_ratelimited("Heartbeat request received. Packet length too small: %d\n",
+ 					   recvlen);
+ 			break;
+ 		}
