@@ -1,0 +1,109 @@
+From: Wei Liu <wei.liu@kernel.org>
+Date: Wed, 3 Feb 2021 15:04:32 +0000
+Patch-mainline: v5.12-rc1
+Subject: asm-generic/hyperv: introduce hv_device_id and auxiliary structures
+Git-commit: 12434e5fb6aed4655340ce74cd2a0dd859dff5bd
+References: bsc#1186071
+
+We will need to identify the device we want Microsoft Hypervisor to
+manipulate.  Introduce the data structures for that purpose.
+
+They will be used in a later patch.
+
+Signed-off-by: Sunil Muthuswamy <sunilmut@microsoft.com>
+Co-Developed-by: Sunil Muthuswamy <sunilmut@microsoft.com>
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Reviewed-by: Michael Kelley <mikelley@microsoft.com>
+Link: https://lore.kernel.org/r/20210203150435.27941-14-wei.liu@kernel.org
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ include/asm-generic/hyperv-tlfs.h | 79 +++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 79 insertions(+)
+
+diff --git a/include/asm-generic/hyperv-tlfs.h b/include/asm-generic/hyperv-tlfs.h
+--- a/include/asm-generic/hyperv-tlfs.h
++++ b/include/asm-generic/hyperv-tlfs.h
+@@ -624,4 +624,83 @@ struct hv_set_vp_registers_input {
+ 	} element[];
+ } __packed;
+ 
++enum hv_device_type {
++	HV_DEVICE_TYPE_LOGICAL = 0,
++	HV_DEVICE_TYPE_PCI = 1,
++	HV_DEVICE_TYPE_IOAPIC = 2,
++	HV_DEVICE_TYPE_ACPI = 3,
++};
++
++typedef u16 hv_pci_rid;
++typedef u16 hv_pci_segment;
++typedef u64 hv_logical_device_id;
++union hv_pci_bdf {
++	u16 as_uint16;
++
++	struct {
++		u8 function:3;
++		u8 device:5;
++		u8 bus;
++	};
++} __packed;
++
++union hv_pci_bus_range {
++	u16 as_uint16;
++
++	struct {
++		u8 subordinate_bus;
++		u8 secondary_bus;
++	};
++} __packed;
++
++union hv_device_id {
++	u64 as_uint64;
++
++	struct {
++		u64 reserved0:62;
++		u64 device_type:2;
++	};
++
++	/* HV_DEVICE_TYPE_LOGICAL */
++	struct {
++		u64 id:62;
++		u64 device_type:2;
++	} logical;
++
++	/* HV_DEVICE_TYPE_PCI */
++	struct {
++		union {
++			hv_pci_rid rid;
++			union hv_pci_bdf bdf;
++		};
++
++		hv_pci_segment segment;
++		union hv_pci_bus_range shadow_bus_range;
++
++		u16 phantom_function_bits:2;
++		u16 source_shadow:1;
++
++		u16 rsvdz0:11;
++		u16 device_type:2;
++	} pci;
++
++	/* HV_DEVICE_TYPE_IOAPIC */
++	struct {
++		u8 ioapic_id;
++		u8 rsvdz0;
++		u16 rsvdz1;
++		u16 rsvdz2;
++
++		u16 rsvdz3:14;
++		u16 device_type:2;
++	} ioapic;
++
++	/* HV_DEVICE_TYPE_ACPI */
++	struct {
++		u32 input_mapping_base;
++		u32 input_mapping_count:30;
++		u32 device_type:2;
++	} acpi;
++} __packed;
++
+ #endif
