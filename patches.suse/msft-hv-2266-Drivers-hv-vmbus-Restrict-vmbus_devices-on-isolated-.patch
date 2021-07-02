@@ -1,0 +1,191 @@
+From: "Andrea Parri (Microsoft)" <parri.andrea@gmail.com>
+Date: Mon, 1 Feb 2021 15:48:12 +0100
+Patch-mainline: v5.12-rc1
+Subject: Drivers: hv: vmbus: Restrict vmbus_devices on isolated guests
+Git-commit: 21a4e356d3588806307555c149b80cec3dedb180
+References: bsc#1183682
+
+Only the VSCs or ICs that have been hardened and that are critical for
+the successful adoption of Confidential VMs should be allowed if the
+guest is running isolated.  This change reduces the footprint of the
+code that will be exercised by Confidential VMs and hence the exposure
+to bugs and vulnerabilities.
+
+Signed-off-by: Andrea Parri (Microsoft) <parri.andrea@gmail.com>
+Reviewed-by: Michael Kelley <mikelley@microsoft.com>
+Link: https://lore.kernel.org/r/20210201144814.2701-3-parri.andrea@gmail.com
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ drivers/hv/channel_mgmt.c | 38 ++++++++++++++++++++++++++++++++++++++
+ include/linux/hyperv.h    |  1 +
+ 2 files changed, 39 insertions(+)
+
+diff --git a/drivers/hv/channel_mgmt.c b/drivers/hv/channel_mgmt.c
+--- a/drivers/hv/channel_mgmt.c
++++ b/drivers/hv/channel_mgmt.c
+@@ -31,101 +31,118 @@ const struct vmbus_device vmbus_devs[] = {
+ 	{ .dev_type = HV_IDE,
+ 	  HV_IDE_GUID,
+ 	  .perf_device = true,
++	  .allowed_in_isolated = false,
+ 	},
+ 
+ 	/* SCSI */
+ 	{ .dev_type = HV_SCSI,
+ 	  HV_SCSI_GUID,
+ 	  .perf_device = true,
++	  .allowed_in_isolated = true,
+ 	},
+ 
+ 	/* Fibre Channel */
+ 	{ .dev_type = HV_FC,
+ 	  HV_SYNTHFC_GUID,
+ 	  .perf_device = true,
++	  .allowed_in_isolated = false,
+ 	},
+ 
+ 	/* Synthetic NIC */
+ 	{ .dev_type = HV_NIC,
+ 	  HV_NIC_GUID,
+ 	  .perf_device = true,
++	  .allowed_in_isolated = true,
+ 	},
+ 
+ 	/* Network Direct */
+ 	{ .dev_type = HV_ND,
+ 	  HV_ND_GUID,
+ 	  .perf_device = true,
++	  .allowed_in_isolated = false,
+ 	},
+ 
+ 	/* PCIE */
+ 	{ .dev_type = HV_PCIE,
+ 	  HV_PCIE_GUID,
+ 	  .perf_device = false,
++	  .allowed_in_isolated = false,
+ 	},
+ 
+ 	/* Synthetic Frame Buffer */
+ 	{ .dev_type = HV_FB,
+ 	  HV_SYNTHVID_GUID,
+ 	  .perf_device = false,
++	  .allowed_in_isolated = false,
+ 	},
+ 
+ 	/* Synthetic Keyboard */
+ 	{ .dev_type = HV_KBD,
+ 	  HV_KBD_GUID,
+ 	  .perf_device = false,
++	  .allowed_in_isolated = false,
+ 	},
+ 
+ 	/* Synthetic MOUSE */
+ 	{ .dev_type = HV_MOUSE,
+ 	  HV_MOUSE_GUID,
+ 	  .perf_device = false,
++	  .allowed_in_isolated = false,
+ 	},
+ 
+ 	/* KVP */
+ 	{ .dev_type = HV_KVP,
+ 	  HV_KVP_GUID,
+ 	  .perf_device = false,
++	  .allowed_in_isolated = false,
+ 	},
+ 
+ 	/* Time Synch */
+ 	{ .dev_type = HV_TS,
+ 	  HV_TS_GUID,
+ 	  .perf_device = false,
++	  .allowed_in_isolated = true,
+ 	},
+ 
+ 	/* Heartbeat */
+ 	{ .dev_type = HV_HB,
+ 	  HV_HEART_BEAT_GUID,
+ 	  .perf_device = false,
++	  .allowed_in_isolated = true,
+ 	},
+ 
+ 	/* Shutdown */
+ 	{ .dev_type = HV_SHUTDOWN,
+ 	  HV_SHUTDOWN_GUID,
+ 	  .perf_device = false,
++	  .allowed_in_isolated = true,
+ 	},
+ 
+ 	/* File copy */
+ 	{ .dev_type = HV_FCOPY,
+ 	  HV_FCOPY_GUID,
+ 	  .perf_device = false,
++	  .allowed_in_isolated = false,
+ 	},
+ 
+ 	/* Backup */
+ 	{ .dev_type = HV_BACKUP,
+ 	  HV_VSS_GUID,
+ 	  .perf_device = false,
++	  .allowed_in_isolated = false,
+ 	},
+ 
+ 	/* Dynamic Memory */
+ 	{ .dev_type = HV_DM,
+ 	  HV_DM_GUID,
+ 	  .perf_device = false,
++	  .allowed_in_isolated = false,
+ 	},
+ 
+ 	/* Unknown GUID */
+ 	{ .dev_type = HV_UNKNOWN,
+ 	  .perf_device = false,
++	  .allowed_in_isolated = false,
+ 	},
+ };
+ 
+@@ -903,6 +920,20 @@ find_primary_channel_by_offer(const struct vmbus_channel_offer_channel *offer)
+ 	return channel;
+ }
+ 
++static bool vmbus_is_valid_device(const guid_t *guid)
++{
++	u16 i;
++
++	if (!hv_is_isolation_supported())
++		return true;
++
++	for (i = 0; i < ARRAY_SIZE(vmbus_devs); i++) {
++		if (guid_equal(guid, &vmbus_devs[i].guid))
++			return vmbus_devs[i].allowed_in_isolated;
++	}
++	return false;
++}
++
+ /*
+  * vmbus_onoffer - Handler for channel offers from vmbus in parent partition.
+  *
+@@ -917,6 +948,13 @@ static void vmbus_onoffer(struct vmbus_channel_message_header *hdr)
+ 
+ 	trace_vmbus_onoffer(offer);
+ 
++	if (!vmbus_is_valid_device(&offer->offer.if_type)) {
++		pr_err_ratelimited("Invalid offer %d from the host supporting isolation\n",
++				   offer->child_relid);
++		atomic_dec(&vmbus_connection.offer_in_progress);
++		return;
++	}
++
+ 	oldchannel = find_primary_channel_by_offer(offer);
+ 
+ 	if (oldchannel != NULL) {
+diff --git a/include/linux/hyperv.h b/include/linux/hyperv.h
+--- a/include/linux/hyperv.h
++++ b/include/linux/hyperv.h
+@@ -789,6 +789,7 @@ struct vmbus_device {
+ 	u16  dev_type;
+ 	guid_t guid;
+ 	bool perf_device;
++	bool allowed_in_isolated;
+ };
+ 
+ #define VMBUS_DEFAULT_MAX_PKT_SIZE 4096
