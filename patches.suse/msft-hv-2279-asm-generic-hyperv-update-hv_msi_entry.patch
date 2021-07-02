@@ -1,0 +1,79 @@
+From: Wei Liu <wei.liu@kernel.org>
+Date: Wed, 3 Feb 2021 15:04:30 +0000
+Patch-mainline: v5.12-rc1
+Subject: asm-generic/hyperv: update hv_msi_entry
+Git-commit: d589ae61bc27b2b9aaac0bf20a9077b6fbda32b6
+References: bsc#1186071
+
+We will soon need to access fields inside the MSI address and MSI data
+fields. Introduce hv_msi_address_register and hv_msi_data_register.
+
+Fix up one user of hv_msi_entry in mshyperv.h.
+
+No functional change expected.
+
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Reviewed-by: Michael Kelley <mikelley@microsoft.com>
+Link: https://lore.kernel.org/r/20210203150435.27941-12-wei.liu@kernel.org
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ arch/x86/include/asm/mshyperv.h   |  4 ++--
+ include/asm-generic/hyperv-tlfs.h | 28 ++++++++++++++++++++++++++--
+ 2 files changed, 28 insertions(+), 4 deletions(-)
+
+diff --git a/arch/x86/include/asm/mshyperv.h b/arch/x86/include/asm/mshyperv.h
+--- a/arch/x86/include/asm/mshyperv.h
++++ b/arch/x86/include/asm/mshyperv.h
+@@ -259,8 +259,8 @@ static inline void hv_apic_init(void) {}
+ static inline void hv_set_msi_entry_from_desc(union hv_msi_entry *msi_entry,
+ 					      struct msi_desc *msi_desc)
+ {
+-	msi_entry->address = msi_desc->msg.address_lo;
+-	msi_entry->data = msi_desc->msg.data;
++	msi_entry->address.as_uint32 = msi_desc->msg.address_lo;
++	msi_entry->data.as_uint32 = msi_desc->msg.data;
+ }
+ 
+ #else /* CONFIG_HYPERV */
+diff --git a/include/asm-generic/hyperv-tlfs.h b/include/asm-generic/hyperv-tlfs.h
+--- a/include/asm-generic/hyperv-tlfs.h
++++ b/include/asm-generic/hyperv-tlfs.h
+@@ -481,12 +481,36 @@ struct hv_create_vp {
+ 	u64 flags;
+ } __packed;
+ 
++union hv_msi_address_register {
++	u32 as_uint32;
++	struct {
++		u32 reserved1:2;
++		u32 destination_mode:1;
++		u32 redirection_hint:1;
++		u32 reserved2:8;
++		u32 destination_id:8;
++		u32 msi_base:12;
++	};
++} __packed;
++
++union hv_msi_data_register {
++	u32 as_uint32;
++	struct {
++		u32 vector:8;
++		u32 delivery_mode:3;
++		u32 reserved1:3;
++		u32 level_assert:1;
++		u32 trigger_mode:1;
++		u32 reserved2:16;
++	};
++} __packed;
++
+ /* HvRetargetDeviceInterrupt hypercall */
+ union hv_msi_entry {
+ 	u64 as_uint64;
+ 	struct {
+-		u32 address;
+-		u32 data;
++		union hv_msi_address_register address;
++		union hv_msi_data_register data;
+ 	} __packed;
+ };
+ 
