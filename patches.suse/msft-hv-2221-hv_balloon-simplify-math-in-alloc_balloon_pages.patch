@@ -1,0 +1,36 @@
+From: Vitaly Kuznetsov <vkuznets@redhat.com>
+Date: Wed, 2 Dec 2020 17:12:44 +0100
+Patch-mainline: v5.11-rc1
+Subject: hv_balloon: simplify math in alloc_balloon_pages()
+Git-commit: 7f3f227b41e81f8669e906c49a240c1678c65cfe
+References: bsc#1186071
+
+'alloc_unit' in alloc_balloon_pages() is either '512' for 2M allocations or
+'1' for 4k allocations. So
+
+1 << get_order(alloc_unit << PAGE_SHIFT)
+
+equals to 'alloc_unit' and the for loop basically sets all them offline.
+Simplify the math to improve the readability.
+
+Signed-off-by: Vitaly Kuznetsov <vkuznets@redhat.com>
+Reviewed-by: David Hildenbrand <david@redhat.com>
+Link: https://lore.kernel.org/r/20201202161245.2406143-2-vkuznets@redhat.com
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ drivers/hv/hv_balloon.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/hv/hv_balloon.c b/drivers/hv/hv_balloon.c
+--- a/drivers/hv/hv_balloon.c
++++ b/drivers/hv/hv_balloon.c
+@@ -1238,7 +1238,7 @@ static unsigned int alloc_balloon_pages(struct hv_dynmem_device *dm,
+ 			split_page(pg, get_order(alloc_unit << PAGE_SHIFT));
+ 
+ 		/* mark all pages offline */
+-		for (j = 0; j < (1 << get_order(alloc_unit << PAGE_SHIFT)); j++)
++		for (j = 0; j < alloc_unit; j++)
+ 			__SetPageOffline(pg + j);
+ 
+ 		bl_resp->range_count++;
