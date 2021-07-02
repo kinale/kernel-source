@@ -1,0 +1,28 @@
+From: Zheng Yongjun <zhengyongjun3@huawei.com>
+Date: Fri, 26 Mar 2021 14:49:42 +0800
+Patch-mainline: v5.13-rc1
+Subject: x86/hyperv: remove unused linux/version.h header
+Git-commit: 90b9bfa4707c85c02cc1b22b57bc8abc24a6a5f0
+References: bsc#1186071
+
+That header is not needed in hv_proc.c.
+
+Reported-by: Hulk Robot <hulkci@huawei.com>
+Signed-off-by: Yongjun Zheng <zhengyongjun3@huawei.com>
+Link: https://lore.kernel.org/r/20210326064942.3263776-1-zhengyongjun3@huawei.com
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ arch/x86/hyperv/hv_proc.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/arch/x86/hyperv/hv_proc.c b/arch/x86/hyperv/hv_proc.c
+--- a/arch/x86/hyperv/hv_proc.c
++++ b/arch/x86/hyperv/hv_proc.c
+@@ -1,6 +1,5 @@
+ // SPDX-License-Identifier: GPL-2.0
+ #include <linux/types.h>
+-#include <linux/version.h>
+ #include <linux/vmalloc.h>
+ #include <linux/mm.h>
+ #include <linux/clockchips.h>
