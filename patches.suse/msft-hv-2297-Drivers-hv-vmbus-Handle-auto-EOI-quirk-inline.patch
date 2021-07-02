@@ -1,0 +1,58 @@
+From: Michael Kelley <mikelley@microsoft.com>
+Date: Tue, 2 Mar 2021 13:38:17 -0800
+Patch-mainline: v5.13-rc1
+Subject: Drivers: hv: vmbus: Handle auto EOI quirk inline
+Git-commit: 946f4b8680b8ad177f6489e023a1d95e82d502e2
+References: bsc#1186071
+
+On x86/x64, Hyper-V provides a flag to indicate auto EOI functionality,
+but it doesn't on ARM64. Handle this quirk inline instead of calling
+into code under arch/x86 (and coming, under arch/arm64).
+
+No functional change.
+
+Signed-off-by: Michael Kelley <mikelley@microsoft.com>
+Reviewed-by: Boqun Feng <boqun.feng@gmail.com>
+Link: https://lore.kernel.org/r/1614721102-2241-6-git-send-email-mikelley@microsoft.com
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ arch/x86/include/asm/mshyperv.h |  3 ---
+ drivers/hv/hv.c                 | 12 +++++++++++-
+ 2 files changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/arch/x86/include/asm/mshyperv.h b/arch/x86/include/asm/mshyperv.h
+--- a/arch/x86/include/asm/mshyperv.h
++++ b/arch/x86/include/asm/mshyperv.h
+@@ -27,9 +27,6 @@ static inline u64 hv_get_register(unsigned int reg)
+ 	return value;
+ }
+ 
+-#define hv_recommend_using_aeoi() \
+-	(!(ms_hyperv.hints & HV_DEPRECATING_AEOI_RECOMMENDED))
+-
+ #define hv_set_clocksource_vdso(val) \
+ 	((val).archdata.vclock_mode = VCLOCK_HVCLOCK)
+ #define hv_enable_vdso_clocksource() \
+diff --git a/drivers/hv/hv.c b/drivers/hv/hv.c
+--- a/drivers/hv/hv.c
++++ b/drivers/hv/hv.c
+@@ -219,7 +219,17 @@ void hv_synic_enable_regs(unsigned int cpu)
+ 
+ 	shared_sint.vector = hv_get_vector();
+ 	shared_sint.masked = false;
+-	shared_sint.auto_eoi = hv_recommend_using_aeoi();
++
++	/*
++	 * On architectures where Hyper-V doesn't support AEOI (e.g., ARM64),
++	 * it doesn't provide a recommendation flag and AEOI must be disabled.
++	 */
++#ifdef HV_DEPRECATING_AEOI_RECOMMENDED
++	shared_sint.auto_eoi =
++			!(ms_hyperv.hints & HV_DEPRECATING_AEOI_RECOMMENDED);
++#else
++	shared_sint.auto_eoi = 0;
++#endif
+ 	hv_set_register(HV_REGISTER_SINT0 + VMBUS_MESSAGE_SINT,
+ 				shared_sint.as_uint64);
+ 
