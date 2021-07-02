@@ -1,0 +1,38 @@
+From: "Andrea Parri (Microsoft)" <parri.andrea@gmail.com>
+Date: Mon, 1 Feb 2021 15:48:13 +0100
+Patch-mainline: v5.12-rc1
+Subject: Drivers: hv: vmbus: Enforce 'VMBus version >= 5.2' on isolated guests
+Git-commit: 7ef4b2f0d9adb73eb66e1f87f22953169c3dc7f8
+References: bsc#1183682
+
+Restrict the protocol version(s) that will be negotiated with the host
+to be 5.2 or greater if the guest is running isolated.  This reduces the
+footprint of the code that will be exercised by Confidential VMs and
+hence the exposure to bugs and vulnerabilities.
+
+Signed-off-by: Andrea Parri (Microsoft) <parri.andrea@gmail.com>
+Reviewed-by: Michael Kelley <mikelley@microsoft.com>
+Link: https://lore.kernel.org/r/20210201144814.2701-4-parri.andrea@gmail.com
+Signed-off-by: Wei Liu <wei.liu@kernel.org>
+Acked-by: Olaf Hering <ohering@suse.de>
+---
+ drivers/hv/connection.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/hv/connection.c b/drivers/hv/connection.c
+--- a/drivers/hv/connection.c
++++ b/drivers/hv/connection.c
+@@ -244,6 +244,13 @@ int vmbus_connect(void)
+ 			break;
+ 	}
+ 
++	if (hv_is_isolation_supported() && version < VERSION_WIN10_V5_2) {
++		pr_err("Invalid VMBus version %d.%d (expected >= %d.%d) from the host supporting isolation\n",
++		       version >> 16, version & 0xFFFF, VERSION_WIN10_V5_2 >> 16, VERSION_WIN10_V5_2 & 0xFFFF);
++		ret = -EINVAL;
++		goto cleanup;
++	}
++
+ 	vmbus_proto_version = version;
+ 	pr_info("Vmbus version:%d.%d\n",
+ 		version >> 16, version & 0xFFFF);
