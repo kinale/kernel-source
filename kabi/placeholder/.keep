@@ -1,0 +1,1 @@
+Add a dummy kABI directory so that kABI patches are not dropped by kbuild on Leap branch merge.
